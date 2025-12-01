@@ -105,8 +105,7 @@ const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Server: http://localhost:${PORT}
 Environment: ${process.env.NODE_ENV || 'development'}
-Database: ${process.env.DB_NAME || 'api_service'} @ ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}
-`);
+Database: ${process.env.DB_NAME || 'api_service'} @ ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}`);
 });
 
 module.exports = app;

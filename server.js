@@ -7,11 +7,12 @@ const app = express();
 // Import routes
 const apiKeysRoutes = require('./routes/api-keys');
 const apiCallsRoutes = require('./routes/api-calls');
+const validateRoutes = require('./routes/validate');
 
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: '*',
   methods: ['GET', 'POST', 'PATCH', 'DELETE'],
   credentials: true,
 }));
@@ -34,6 +35,7 @@ app.get('/health', (req, res) => {
 // API Routes
 app.use('/api/keys', apiKeysRoutes);
 app.use('/api/calls', apiCallsRoutes);
+app.use('/api/validate', validateRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

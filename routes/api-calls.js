@@ -6,142 +6,115 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const router = express.Router();
 
 // Example protected API endpoint that tracks usage
-router.post("/execute", async (req, res) => {
+router.post("/execute", validateApiKey, async (req, res) => {
   try {
-    const geminiKey = req.headers["x-gemini-key"];
+    const startTime = Date.now();
+    const { endpoint, title } = req.body;
+    const apiKeyData = req.apiKeyData; 
+
+    const geminiKey = process.env.GEMINI_API_KEY; 
 
     if (!geminiKey) {
-      return res.status(400).json({
-        error: "Missing Google Gemini API Key. Provide in header: x-gemini-key"
+      return res.status(500).json({ error: "Gemini API key missing in .env" });
+    }
+
+    if (!endpoint) {
+      return res.status(400).json({ error: "endpoint parameter is required" });
+    }
+
+    // Check API quota
+    if (apiKeyData.remaining_calls <= 0) {
+      await logApiCall(
+        apiKeyData.id,
+        apiKeyData.apikey,
+        endpoint,
+        "POST",
+        429,
+        req.body,
+        { error: "quota_exceeded" },
+        "Quota exceeded",
+        req.ip,
+        req.get("user-agent"),
+        0
+      );
+
+      return res.status(429).json({
+        error: "Quota exceeded",
+        remaining_calls: 0,
+        total_calls: apiKeyData.total_calls,
+        used_calls: apiKeyData.used_calls,
       });
     }
-    
-    const prompt = "Write description about Node.js.";
 
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const prompt = `
+      Generate a clear, helpful, well-structured task description and instructions for completing the task.
+      Task title: "${title}"
 
-    const result = await model.generateContent(prompt);
-    const aiText = result.response.text();
+      Output should be:
+      - 10 to 15 sentences
+      - No bullet points
+      - Professional tone
+    `;
+    let aiResponse = "";
+    let statusCode = 200;
+    let errorMsg = null;
 
-    return res.status(200).json({
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const result = await model.generateContent(prompt);
+      aiResponse = result.response.text();
+    } catch (err) {
+      statusCode = 500;
+      errorMsg = err.message;
+      aiResponse = null;
+    }
+
+    const executionTime = Date.now() - startTime;
+
+    await logApiCall(
+      apiKeyData.id,
+      apiKeyData.apikey,
+      endpoint,
+      "POST",
+      statusCode,
+      req.body,
+      { prompt, ai_response: aiResponse },
+      errorMsg,
+      req.ip,
+      req.get("user-agent"),
+      executionTime
+    );
+
+    // Update usage counters
+    const updateQuery = `
+      UPDATE api_keys
+      SET used_calls = used_calls + 1,
+          updated_at = CURRENT_TIMESTAMP,
+          last_used_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING used_calls, (total_calls - used_calls) AS remaining_calls
+    `;
+
+    const updateResult = await pool.query(updateQuery, [apiKeyData.id]);
+
+    return res.status(statusCode).json({
       predefined_prompt: prompt,
-      ai_response: aiText
+      ai_response: aiResponse,
+      generated_description: aiResponse,
+      execution_time_ms: executionTime,
+      quota: {
+        used: updateResult.rows[0].used_calls,
+        remaining: updateResult.rows[0].remaining_calls,
+        total: apiKeyData.total_calls,
+      },
     });
-
-  } catch (err) {
-    console.error("Gemini Error:", err);
-    res.status(500).json({
-      error: "Failed to generate response from Gemini",
-      details: err.message
-    });
+  } catch (error) {
+    console.error("Error executing API call:", error);
+    res.status(500).json({ error: "Failed to execute API call" });
   }
 });
-
-
-// router.post('/execute', validateApiKey, async (req, res) => {
-//   try {
-//     const startTime = Date.now();
-//     const { endpoint, action } = req.body;
-//     const apiKeyData = req.apiKeyData;
-    
-//     if (!endpoint) {
-//       return res.status(400).json({ error: 'endpoint parameter is required' });
-//     }
-
-//     // Check if API key has remaining calls
-//     if (apiKeyData.remaining_calls <= 0) {
-//       // Log failed call
-//       await logApiCall(
-//         apiKeyData.id,
-//         apiKeyData.apikey,
-//         endpoint,
-//         'POST',
-//         429,
-//         req.body,
-//         { error: 'quota_exceeded' },
-//         'Quota exceeded',
-//         req.ip,
-//         req.get('user-agent'),
-//         0
-//       );
-
-//       return res.status(429).json({ 
-//         error: 'Quota exceeded',
-//         remaining_calls: 0,
-//         total_calls: apiKeyData.total_calls,
-//         used_calls: apiKeyData.used_calls
-//       });
-//     }
-
-//     // Simulate API execution based on action
-//     let responseBody = {};
-//     let statusCode = 200;
-//     let errorMsg = null;
-
-//     try {
-//       switch (action) {
-//         case 'process_data':
-//           responseBody = { message: 'Data processed successfully', timestamp: new Date().toISOString() };
-//           break;
-//         case 'fetch_info':
-//           responseBody = { data: { info: 'Sample data', source: endpoint } };
-//           break;
-//         case 'generate_report':
-//           responseBody = { report: 'Generated report', status: 'completed' };
-//           break;
-//         default:
-//           responseBody = { message: 'API call executed', endpoint, action };
-//       }
-//     } catch (error) {
-//       statusCode = 500;
-//       errorMsg = error.message;
-//       responseBody = { error: errorMsg };
-//     }
-
-//     const executionTime = Date.now() - startTime;
-
-//     // Log the API call
-//     await logApiCall(
-//       apiKeyData.id,
-//       apiKeyData.apikey,
-//       endpoint,
-//       'POST',
-//       statusCode,
-//       req.body,
-//       responseBody,
-//       errorMsg,
-//       req.ip,
-//       req.get('user-agent'),
-//       executionTime
-//     );
-
-//     // Increment used_calls and update last_used_at
-//     const updateQuery = `
-//       UPDATE api_keys
-//       SET used_calls = used_calls + 1, 
-//           updated_at = CURRENT_TIMESTAMP,
-//           last_used_at = CURRENT_TIMESTAMP
-//       WHERE id = $1
-//       RETURNING used_calls, (total_calls - used_calls) as remaining_calls
-//     `;
-
-//     const updateResult = await pool.query(updateQuery, [apiKeyData.id]);
-
-//     res.status(statusCode).json({
-//       ...responseBody,
-//       execution_time_ms: executionTime,
-//       quota: {
-//         used: updateResult.rows[0].used_calls,
-//         remaining: updateResult.rows[0].remaining_calls,
-//         total: apiKeyData.total_calls
-//       }
-//     });
-//   } catch (error) {
-//     console.error('Error executing API call:', error);
-//     res.status(500).json({ error: 'Failed to execute API call' });
-//   }
-// });
 
 // Get API call logs for a specific key
 router.get('/logs', validateApiKey, async (req, res) => {

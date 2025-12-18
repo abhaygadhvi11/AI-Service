@@ -116,6 +116,137 @@ router.post("/execute", validateApiKey, async (req, res) => {
   }
 });
 
+router.post("/items", validateApiKey, async (req, res) => {
+  const startTime = Date.now();
+
+  try {
+    const { itemName, description, spendCategory } = req.body;
+    const apiKeyData = req.apiKeyData;
+    const geminiKey = process.env.GEMINI_API_KEY_2;
+
+    if (!geminiKey) {
+      return res.status(500).json({ error: "Gemini API key missing in .env" });
+    }
+
+    if (!itemName || !spendCategory) {
+      return res.status(400).json({
+        error: "itemName and spendCategory are required",
+      });
+    }
+
+    // Quota check
+    if (apiKeyData.remaining_calls <= 0) {
+      await logApiCall(
+        apiKeyData.id,
+        apiKeyData.apikey,
+        "/items",
+        "POST",
+        429,
+        req.body,
+        { error: "quota_exceeded" },
+        "Quota exceeded",
+        req.ip,
+        req.get("user-agent"),
+        0
+      );
+
+      return res.status(429).json({
+        error: "Quota exceeded",
+        remaining_calls: 0,
+        total_calls: apiKeyData.total_calls,
+        used_calls: apiKeyData.used_calls,
+      });
+    }
+
+    const prompt = `
+      You are an expert product content generator.
+
+      Input:
+      - Item Name: "${itemName}"
+      - Description (optional): "${description || "N/A"}"
+      - Spend Category: "${spendCategory}"
+
+      Generate a STRICTLY VALID JSON response in the following format only.
+      Do NOT include markdown, explanations, or extra text.
+
+      {
+        "detailed_description": "6 to 8 professional sentences describing the item, its usage, benefits, and relevance to the spend category.",
+        "specifications": [
+          { "attribute": "Attribute name", "potential_values": ["Value 1", "Value 2"] }
+        ]
+      }
+
+      Rules:
+      - Description must be natural, professional, and procurement-friendly
+      - Include 5 to 7 realistic specifications
+      - Attribute names must be concise
+      - Potential values must be realistic and commonly used
+    `;
+
+    let aiResponse = null;
+    let parsedResponse = null;
+    let statusCode = 200;
+    let errorMsg = null;
+
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const result = await model.generateContent(prompt);
+      aiResponse = result.response.text();
+
+      // Ensure valid JSON
+      parsedResponse = JSON.parse(aiResponse);
+    } catch (err) {
+      statusCode = 500;
+      errorMsg = err.message;
+    }
+
+    const executionTime = Date.now() - startTime;
+
+    await logApiCall(
+      apiKeyData.id,
+      apiKeyData.apikey,
+      "/items",
+      "POST",
+      statusCode,
+      req.body,
+      { prompt, ai_response: parsedResponse },
+      errorMsg,
+      req.ip,
+      req.get("user-agent"),
+      executionTime
+    );
+
+    // Update usage
+    const updateQuery = `
+      UPDATE api_keys
+      SET used_calls = used_calls + 1,
+          updated_at = CURRENT_TIMESTAMP,
+          last_used_at = CURRENT_TIMESTAMP
+      WHERE id = $1
+      RETURNING used_calls, (total_calls - used_calls) AS remaining_calls
+    `;
+
+    const updateResult = await pool.query(updateQuery, [apiKeyData.id]);
+
+    return res.status(statusCode).json({
+      item_name: itemName,
+      spend_category: spendCategory,
+      result: parsedResponse,
+      execution_time_ms: executionTime,
+      quota: {
+        used: updateResult.rows[0].used_calls,
+        remaining: updateResult.rows[0].remaining_calls,
+        total: apiKeyData.total_calls,
+      },
+    });
+  } catch (error) {
+    console.error("Error in /items route:", error);
+    return res.status(500).json({ error: "Failed to generate item details" });
+  }
+});
+
 // Get API call logs for a specific key
 router.get('/logs', validateApiKey, async (req, res) => {
   try {

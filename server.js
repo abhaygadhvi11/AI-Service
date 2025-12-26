@@ -8,6 +8,7 @@ const app = express();
 const apiKeysRoutes = require('./routes/api-keys');
 const apiCallsRoutes = require('./routes/api-calls');
 const validateRoutes = require('./routes/validate');
+const apiGenerateRoutes = require('./routes/api-generate');
 
 // Middleware
 app.use(express.json());
@@ -36,6 +37,7 @@ app.get('/health', (req, res) => {
 app.use('/api/keys', apiKeysRoutes);
 app.use('/api/calls', apiCallsRoutes);
 app.use('/api/validate', validateRoutes);
+app.use('/api/generate', apiGenerateRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

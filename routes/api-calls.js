@@ -5,6 +5,96 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const router = express.Router();
 
+router.post("/execute/:apiId", validateApiKey, async (req, res) => {
+  const startTime = Date.now();
+  const { apiId } = req.params;
+  const variablesInput = req.body;
+  const apiKeyData = req.apiKeyData;
+
+  try {
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (!geminiKey) {
+      return res.status(500).json({ error: "Gemini API key missing in .env" });
+    }
+
+    const apiResult = await pool.query(
+      "SELECT * FROM custom_apis WHERE id = $1",
+      [apiId]
+    );
+
+    if (apiResult.rowCount === 0) {
+      return res.status(404).json({ error: "API not found" });
+    }
+
+    const apiConfig = apiResult.rows[0];
+
+    if (apiKeyData.remaining_calls <= 0) {
+      return res.status(429).json({ error: "Quota exceeded" });
+    }
+
+    let prompt = apiConfig.prompt_template;
+    for (const key of apiConfig.variables) {
+      prompt = prompt.replaceAll(`{{${key}}}`, variablesInput[key]);
+    }
+
+    let aiResponse = null;
+    let parsedResponse = null;
+    let statusCode = 200;
+    let errorMsg = null;
+
+    try {
+      const genAI = new GoogleGenerativeAI(geminiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+      const result = await model.generateContent(prompt);
+      aiResponse = result.response.text();
+
+      // Ensure valid JSON
+      parsedResponse = JSON.parse(aiResponse);
+    } catch (err) {
+      statusCode = 500;
+      errorMsg = err.message;
+    }
+
+    const executionTime = Date.now() - startTime;
+
+    await logApiCall(
+      apiKeyData.id,
+      apiKeyData.apikey,
+      apiConfig.endpoint,
+      "POST",
+      200,
+      variablesInput,
+      parsedResponse,
+      null,
+      req.ip,
+      req.get("user-agent"),
+      executionTime
+    );
+
+    const updateResult = await pool.query(
+      `UPDATE api_keys
+       SET used_calls = used_calls + 1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+       RETURNING used_calls, (total_calls - used_calls) AS remaining_calls`,
+      [apiKeyData.id]
+    );
+
+    return res.json({
+      api: apiConfig.name,
+      response: parsedResponse,
+      execution_time_ms: executionTime,
+      quota: updateResult.rows[0]
+    });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Execution failed" });
+  }
+});
+
 // Example protected API endpoint that tracks usage
 router.post("/execute", validateApiKey, async (req, res) => {
   try {

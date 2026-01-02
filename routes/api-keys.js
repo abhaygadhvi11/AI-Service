@@ -24,7 +24,7 @@ router.post('/generate', async (req, res) => {
 
     const result = await pool.query(query, [apiKey, name || 'Unnamed Key', total_calls, 'system']);
     
-    res.status(201).json({
+    res.status(200).json({
       message: 'API Key generated successfully',
       key: result.rows[0],
       warning: 'Save your API key securely. You won\'t be able to see it again!'

@@ -37,7 +37,7 @@ app.get('/health', (req, res) => {
 app.use('/api/keys', apiKeysRoutes);
 app.use('/api/calls', apiCallsRoutes);
 app.use('/api/validate', validateRoutes);
-app.use('/api/generate', apiGenerateRoutes);
+app.use('/api/prompt', apiGenerateRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

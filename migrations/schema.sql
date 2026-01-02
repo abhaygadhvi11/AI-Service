@@ -45,6 +45,15 @@ CREATE TABLE api_calls (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE custom_apis (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  prompt_template TEXT NOT NULL,
+  variables JSONB NOT NULL, 
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 -- Indexes for performance optimization
 CREATE INDEX idx_api_keys_apikey ON api_keys(apikey);
 CREATE INDEX idx_api_keys_is_active ON api_keys(is_active);

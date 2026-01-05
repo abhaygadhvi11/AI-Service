@@ -20,7 +20,7 @@ function ApiKeyDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Create New API Key</DialogTitle>
 
-      <DialogContent>
+      <DialogContent sx={{ mt: 1 }}>
         <TextField
           label="Name"
           fullWidth
@@ -43,7 +43,7 @@ function ApiKeyDialog({
         />
       </DialogContent>
 
-      <DialogActions>
+      <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose} disabled={loading}>
           Cancel
         </Button>

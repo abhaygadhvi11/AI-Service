@@ -76,7 +76,8 @@ router.post("/execute/:apiId", validateApiKey, async (req, res) => {
     const updateResult = await pool.query(
       `UPDATE api_keys
        SET used_calls = used_calls + 1,
-           updated_at = CURRENT_TIMESTAMP
+           updated_at = CURRENT_TIMESTAMP,
+           last_used_at = CURRENT_TIMESTAMP
        WHERE id = $1
        RETURNING used_calls, (total_calls - used_calls) AS remaining_calls`,
       [apiKeyData.id]
@@ -141,6 +142,7 @@ router.post("/execute", validateApiKey, async (req, res) => {
       Task title: "${title}"
 
       Output should be:
+      - maximum Characters 1800
       - 10 to 15 sentences
       - No bullet points
       - Professional tone

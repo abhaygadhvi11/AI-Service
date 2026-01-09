@@ -40,7 +40,7 @@ function ApiTable({ rows, loading }) {
                   backgroundColor: "#e5eeffff",
                 }}
               >
-                {head}
+                {head.toUpperCase()}
               </TableCell>
             ))}
           </TableRow>

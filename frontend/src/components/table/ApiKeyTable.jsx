@@ -42,7 +42,7 @@ function ApiKeyTable({ rows, loading }) {
                   backgroundColor: "#e5eeffff",
                 }}
               >
-                {head}
+                {head.toUpperCase()}
               </TableCell>
             ))}
           </TableRow>

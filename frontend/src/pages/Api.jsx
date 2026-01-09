@@ -17,7 +17,6 @@ function Api() {
 
   const [form, setForm] = useState({
     name: "",
-    endpoint: "",
     prompt_template: "",
   });
 
@@ -46,14 +45,12 @@ function Api() {
           Pragma: "no-cache",
         },
         name: form.name,
-        endpoint: form.endpoint,
         prompt_template: form.prompt_template,
       });
 
       setOpen(false);
       setForm({
         name: "",
-        endpoint: "",
         prompt_template: "",
       });
 
